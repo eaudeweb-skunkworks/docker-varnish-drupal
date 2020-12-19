@@ -6,6 +6,7 @@ import std;
 # - this VCL is for using cache tags with drupal 8. Minor chages of VCL provided by Jeff Geerling.
 
 acl upstream_proxy_acl {
+    "app";
     "127.0.0.1";
 }
 
@@ -69,7 +70,7 @@ sub vcl_recv {
     # Handle PURGE requests
     if (req.method == "PURGE") {
         # Check the IP is allowed.
-        if (std.ip(req.http.X-Real-IP, "0.0.0.0") !~ purge_acl) {
+        if (!client.ip ~ purge_acl) {
             return (synth(403, "Not allowed."));
         }
         return (purge);
@@ -77,7 +78,7 @@ sub vcl_recv {
 
     # Handle BAN requests
     if (req.method == "BAN") {
-        if (std.ip(req.http.X-Real-IP, "0.0.0.0") !~ purge_acl) {
+        if (!client.ip ~ purge_acl) {
             return (synth(403, "Not allowed."));
         }
         # Logic for the ban, using the Cache-Tags header. For more info
@@ -93,7 +94,7 @@ sub vcl_recv {
 
     # Clear entire domain
     if (req.method == "FULLBAN") {
-         if (std.ip(req.http.X-Real-IP, "0.0.0.0") !~ purge_acl) {
+         if (!client.ip ~ purge_acl) {
             return (synth(403, "Not allowed."));
         }
         ban("req.http.host ~ .*");
@@ -102,7 +103,7 @@ sub vcl_recv {
 
     # Auth
     if (req.method == "URIBAN") {
-        if (std.ip(req.http.X-Real-IP, "0.0.0.0") !~ purge_acl) {
+        if (!client.ip ~ purge_acl) {
             return (synth(403, "Not allowed."));
         }
         ban("req.http.host == " + req.http.host + " && req.url == " + req.url);
