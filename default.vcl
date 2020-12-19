@@ -5,10 +5,10 @@ import std;
 # Features:
 # - this VCL is for using cache tags with drupal 8. Minor chages of VCL provided by Jeff Geerling.
 
-acl upstream_proxy_acl {
-    "app";
-    "127.0.0.1";
-}
+# For Docker this is not useful to compute X-Forwarded-For. Is always xxx.xxx.xxx.1?
+# acl upstream_proxy_acl {
+#    "ssl-terminator-ip";
+# }
 
 
 # Backend definition. Set this to point to your content server.
@@ -58,10 +58,17 @@ sub vcl_recv {
 
     # Set the X-Forwarded-For header so the backend can see the original
     # IP address. If one is already set by an upstream proxy, we'll just re-use that.
-    if (client.ip ~ upstream_proxy_acl && req.http.X-Forwarded-For) {
+    std.collect(req.http.X-Forwarded-For);
+    # std.log("client.ip:" + client.ip);
+    # if (client.ip ~ upstream_proxy_acl && req.http.X-Forwarded-For) {
+    if (req.http.X-Forwarded-For) {
         set req.http.X-Forwarded-For = req.http.X-Forwarded-For;
+        set req.http.X-Forwarded-For = regsub(req.http.X-Forwarded-For, "^(([0-9]{1,3}\.){3}[0-9]{1,3})(.*)", "\1");
+        # set req.http.X-Forwarded-For = regsub(req.http.X-Forwarded-For, "^([^,]+),?.*$", "\1");
+        # std.log("ip-x:" + req.http.X-Forwarded-For);
     } else {
         set req.http.X-Forwarded-For = regsub(client.ip, ":.*", "");
+        # std.log("ip-c:" + client.ip);
     }
 
     # std.syslog(0, "" + req.http.X-Real-IP);
@@ -70,7 +77,7 @@ sub vcl_recv {
     # Handle PURGE requests
     if (req.method == "PURGE") {
         # Check the IP is allowed.
-        if (!client.ip ~ purge_acl) {
+        if (std.ip(req.http.X-Forwarded-For, "0.0.0.0") !~ purge_acl) {
             return (synth(403, "Not allowed."));
         }
         return (purge);
@@ -78,7 +85,7 @@ sub vcl_recv {
 
     # Handle BAN requests
     if (req.method == "BAN") {
-        if (!client.ip ~ purge_acl) {
+        if (std.ip(req.http.X-Forwarded-For, "0.0.0.0") !~ purge_acl) {
             return (synth(403, "Not allowed."));
         }
         # Logic for the ban, using the Cache-Tags header. For more info
@@ -94,7 +101,7 @@ sub vcl_recv {
 
     # Clear entire domain
     if (req.method == "FULLBAN") {
-         if (!client.ip ~ purge_acl) {
+         if (std.ip(req.http.X-Forwarded-For, "0.0.0.0") !~ purge_acl) {
             return (synth(403, "Not allowed."));
         }
         ban("req.http.host ~ .*");
@@ -103,7 +110,7 @@ sub vcl_recv {
 
     # Auth
     if (req.method == "URIBAN") {
-        if (!client.ip ~ purge_acl) {
+        if (std.ip(req.http.X-Forwarded-For, "0.0.0.0") !~ purge_acl) {
             return (synth(403, "Not allowed."));
         }
         ban("req.http.host == " + req.http.host + " && req.url == " + req.url);
